@@ -1,81 +1,34 @@
-import { useStoryblokState, getStoryblokApi, StoryblokComponent } from "@storyblok/react";
-import HeadComponent from "../components/genericComponents/HeadComponent/HeadComponent";
-import { getTags } from "../functions/services/metaTagService";
+import { StoryblokComponent, useStoryblokState, getStoryblokApi } from "@storyblok/react";
 
-export default function Page({ story, preview, socialtags }) {
-  story = useStoryblokState(story, { //Hook that connects the current page to the Storyblok Real Time visual editor. Needs information about the relations in order for the relations to be editable as well.
-    resolveRelations: [
-    ]
-  }, preview);
-
+export default function Page({ story }) {
+  story = useStoryblokState(story);
   return (
-    <>
-      <HeadComponent socialTags={socialtags} />
+    <main>
       <StoryblokComponent blok={story.content} />
-    </>
+    </main>
   );
 }
 
-
 export async function getStaticProps({ params }) {
   let slug = params.slug ? params.slug.join("/") : "home";
-
-  let sbParams = {
-    version: "draft", // 'draft' or 'published'
-    resolve_relations: [
-      
-    ]
-  };
+  const sbParams = { version: "draft" };
 
   const storyblokApi = getStoryblokApi();
+  const { data } = await storyblokApi.get(`cdn/stories/${slug}`, sbParams);
 
-  let { data } = await storyblokApi.get(`cdn/stories/${slug}`, sbParams);
-  if (!data) {
-    return {
-      notFound: true,
-    }
-  }
-
-  const title = data.story.name;
-  const description = data.story.content.tagline ? data.story.content.tagline : `${title}`;
-  const socialtags = getTags({
-    storyblokSocialTag: data.story.content.socialtag,
-    pageDefaults: {
-      "og:title": title,
-      "og:description": description,
-      "og:url": `${process.env.NEXT_PUBLIC_DEPLOY_URL}`+slug
-    }
-  });
-
-  return {
-    props: {
-      story: data ? data.story : false,
-      key: data ? data.story.id : false,
-      socialtags
-    },
-    revalidate: 10,
-  };
+  return { props: { story: data ? data.story : false } };
 }
 
 export async function getStaticPaths() {
   const storyblokApi = getStoryblokApi();
+  const { data } = await storyblokApi.get("cdn/links/");
 
-  let { data } = await storyblokApi.get("cdn/links/");
+  const paths = Object.keys(data.links)
+    .filter((key) => !data.links[key].is_folder)
+    .map((key) => {
+      const slug = data.links[key].slug;
+      return { params: { slug: slug.split("/") } };
+    });
 
-  let paths = [];
-  Object.keys(data.links).forEach((linkKey) => {
-    if (data.links[linkKey].is_folder) {
-      return;
-    }
-
-    const slug = data.links[linkKey].slug;
-    let splittedSlug = slug.split("/");
-
-    paths.push({ params: { slug: splittedSlug } });
-  });
-
-  return {
-    paths: paths,
-    fallback: 'blocking'
-  };
+  return { paths, fallback: false };
 }
